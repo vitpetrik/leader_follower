@@ -1,22 +1,14 @@
-<!-- 
- - @file uwb.launch
- - @author Vit Petrik (petrivi2@fel.cvut.cz)
- - @brief Launch nodeleted for Qorvo DW1001 with custom firmware
- - @version 0.1
- - @date 2022-11-17
- - 
- - @copyright Copyright (c) 2022
- - 
--->
-
 <launch>
-  <arg name="UAV_NAME" default="$(optenv UAV_NAME uav)" />
-  <arg name="name" default="_uwb" />
+  <arg name="uav_name" default="$(optenv UAV_NAME uav1)"/>
   <arg name="profiler" default="$(optenv PROFILER false)" />
-  <arg name="preprocessing" default="1" />
 
-  <group ns="$(arg UAV_NAME)">
-    <node name="follower" pkg="leader_follower" type="leader_follower_node" output="screen" respawn="true">
+  <group ns="$(arg uav_name)">
+    <node name="object_tracker" pkg="object_tracker" type="object_tracker_node" output="screen" respawn="true">
+        <param name="uav_name" value="$(arg uav_name)" />
+
+        <remap from="~leader" to="object_tracker/filtered_poses"/>
+        <remap from="~force" to="control_manager/speed_tracker/command"/>
+        <remap from="~switch_tracker" to="control_manager/switch_tracker" />
     </node>
   </group>
 

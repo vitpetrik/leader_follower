@@ -7,8 +7,8 @@ FILE(GLOB_RECURSE YAML_FILES include *.yaml)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g -Wall -Wextra")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -std=c++17 -g -Wall -Wextra -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g -Wall -Wextra -finput-charset=UTF-8 -fextended-identifiers")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -std=c++17 -g -Wall -Wextra -O3 -finput-charset=UTF-8 -fextended-identifiers")
 # set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O0 -g -DNDEBUG -std=c++17 -g -Wall -Wextra")
 
 ## Find catkin macros and libraries
@@ -18,7 +18,12 @@ find_package(catkin REQUIRED COMPONENTS
   mrs_msgs
   roscpp
   std_msgs
+  tf2_eigen
 )
+
+find_package(Eigen3 REQUIRED)
+set(Eigen_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIRS})
+set(Eigen_LIBRARIES ${Eigen_LIBRARIES})
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
@@ -156,6 +161,7 @@ add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catk
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
+  ${EIGEN3_LIBRARIES}
 )
 
 #############
