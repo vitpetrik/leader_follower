@@ -9,6 +9,7 @@
         <remap from="~leader" to="object_tracker/filtered_poses"/>
         <remap from="~force" to="control_manager/speed_tracker/command"/>
         <remap from="~switch_tracker" to="control_manager/switch_tracker" />
+        <remap from="~reference" to="control_manager/reference" />
     </node>
   </group>
 
