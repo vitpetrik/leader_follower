@@ -112,8 +112,6 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
     for (auto element : msg.poses)
     {
-        if(element.id != 0x0a)
-            continue;
         Eigen::Quaterniond q(element.pose.orientation.w, element.pose.orientation.x, element.pose.orientation.y, element.pose.orientation.z);
         Eigen::Vector3d body(element.pose.position.x, element.pose.position.y, element.pose.position.z);
 
