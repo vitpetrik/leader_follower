@@ -18,19 +18,26 @@
 #include <mrs_msgs/ReferenceStampedSrv.h>
 #include <mrs_msgs/String.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <mrs_lib/param_loader.h>
+
 #include <algorithm>
 
 #include "leader_follower.h"
 #include <ros/ros.h>
 #include <Eigen/Dense>
+#include <tf/tf.h>
 
 #include <math.h>
 
-#define GOAL_DISTANCE 5.0
+#define GOAL_DISTANCE 7.5
 
 ros::Publisher force_pub;
 ros::ServiceClient switch_ser;
 ros::ServiceClient reference_ser;
+
+int leader_id = 0;
+double distance = 8;
+double angle = M_PI;
 
 #if 0
 
@@ -112,18 +119,25 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
     for (auto element : msg.poses)
     {
+        if(element.id != leader_id)
+            continue;
+
         Eigen::Quaterniond q(element.pose.orientation.w, element.pose.orientation.x, element.pose.orientation.y, element.pose.orientation.z);
         Eigen::Vector3d body(element.pose.position.x, element.pose.position.y, element.pose.position.z);
-
-        new_position << -1, 0, 0;
-        new_position = q*new_position;
+        auto euler = q.toRotationMatrix().eulerAngles(0, 1, 2);
+        new_position << cos(angle), sin(angle), 0;
+        new_position = q * new_position;
         new_position(2) = 0;
         new_position.normalize();
-        new_position *= GOAL_DISTANCE;
+        new_position *= distance;
 
         new_position += body;
 
-        heading = atan2(body(1), body(0));
+        tf::Quaternion q_tf(element.pose.orientation.x,
+                            element.pose.orientation.y,
+                            element.pose.orientation.z,
+                            element.pose.orientation.w);
+        heading = tf::getYaw(q_tf);
     }
 
     ROS_INFO_STREAM("[LEADER_FOLLOWER] Force: " << new_position.transpose());
@@ -143,6 +157,12 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "leader_follower");
     ros::NodeHandle nh("~");
+
+    mrs_lib::ParamLoader param_loader(nh, "Leader follower");
+
+    param_loader.loadParam("leader_id", leader_id);
+    param_loader.loadParam("distance", distance);
+    param_loader.loadParam("angle", angle);
 
     ros::Subscriber pose_sub = nh.subscribe("leader", 10, leader_cb);
     force_pub = nh.advertise<mrs_msgs::SpeedTrackerCommand>("force", 10);

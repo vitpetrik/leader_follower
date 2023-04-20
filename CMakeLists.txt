@@ -18,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
   mrs_msgs
   roscpp
   std_msgs
+  mrs_lib
   tf2_eigen
 )
 

@@ -2,9 +2,17 @@
   <arg name="uav_name" default="$(optenv UAV_NAME uav1)"/>
   <arg name="profiler" default="$(optenv PROFILER false)" />
 
+  <arg name="angle" default="3.14"/>
+  <arg name="distance" default="8"/>
+  <arg name="leader_id" default="0"/>
+
   <group ns="$(arg uav_name)">
     <node name="leader_follower" pkg="leader_follower" type="leader_follower_node" output="screen" respawn="true">
         <param name="uav_name" value="$(arg uav_name)" />
+
+        <param name="angle" value="$(arg angle)" />
+        <param name="distance" value="$(arg distance)" />
+        <param name="leader_id" value="$(arg leader_id)" />
 
         <remap from="~leader" to="object_tracker/filtered_poses"/>
         <remap from="~force" to="control_manager/speed_tracker/command"/>
