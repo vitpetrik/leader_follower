@@ -21,6 +21,7 @@
         <remap from="~force" to="control_manager/speed_tracker/command"/>
         <remap from="~switch_tracker" to="control_manager/switch_tracker" />
         <remap from="~reference" to="control_manager/reference" />
+        <remap from="~trajectory_path" to="trajectory_generation/path" />
     </node>
   </group>
 
