@@ -140,8 +140,8 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
         heading = tf::getYaw(q_tf);
     }
 
-    ROS_INFO_STREAM("[LEADER_FOLLOWER] Force: " << new_position.transpose());
-    ROS_INFO_STREAM("[LEADER_FOLLOWER] Heading: " << heading);
+    ROS_INFO_STREAM_THROTTLE(1.0, "[LEADER_FOLLOWER] Force: " << new_position.transpose());
+    ROS_INFO_STREAM_THROTTLE(1.0, "[LEADER_FOLLOWER] Heading: " << heading);
 
     ref.request.reference.position.x = new_position(0);
     ref.request.reference.position.y = new_position(1);
