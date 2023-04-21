@@ -20,6 +20,10 @@
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <mrs_lib/param_loader.h>
 
+#include <std_srvs/Trigger.h>
+#include <std_srvs/TriggerRequest.h>
+#include <std_srvs/TriggerResponse.h>
+
 #include <algorithm>
 
 #include "leader_follower.h"
@@ -34,6 +38,8 @@
 ros::Publisher force_pub;
 ros::ServiceClient switch_ser;
 ros::ServiceClient reference_ser;
+
+bool running = false;
 
 int leader_id = 0;
 double distance = 8;
@@ -110,6 +116,9 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
 void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 {
+    if(!running)
+        return;
+
     mrs_msgs::ReferenceStampedSrv ref;
     ref.request.header.stamp = ros::Time::now();
     ref.request.header.frame_id = msg.header.frame_id;
@@ -119,13 +128,13 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
     for (auto element : msg.poses)
     {
-        if(element.id != leader_id)
+        if (element.id != leader_id)
             continue;
 
         Eigen::Quaterniond q(element.pose.orientation.w, element.pose.orientation.x, element.pose.orientation.y, element.pose.orientation.z);
         Eigen::Vector3d body(element.pose.position.x, element.pose.position.y, element.pose.position.z);
         auto euler = q.toRotationMatrix().eulerAngles(0, 1, 2);
-        new_position << cos(angle), sin(angle), 0;
+        new_position << cos(M_PI*angle/180), sin(M_PI*angle/180), 0;
         new_position = q * new_position;
         new_position(2) = 0;
         new_position.normalize();
@@ -153,6 +162,18 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
     return;
 }
 
+bool stop(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
+{
+    running = false;
+    return true;
+}
+
+bool start(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
+{
+    running = true;
+    return true;
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "leader_follower");
@@ -164,10 +185,15 @@ int main(int argc, char **argv)
     param_loader.loadParam("distance", distance);
     param_loader.loadParam("angle", angle);
 
+    ros::ServiceServer start_follower = nh.advertiseService("start", start);
+    ros::ServiceServer stop_follower = nh.advertiseService("stop", stop);
+
     ros::Subscriber pose_sub = nh.subscribe("leader", 10, leader_cb);
     force_pub = nh.advertise<mrs_msgs::SpeedTrackerCommand>("force", 10);
     switch_ser = nh.serviceClient<mrs_msgs::String>("switch_tracker");
     reference_ser = nh.serviceClient<mrs_msgs::ReferenceStampedSrv>("reference");
+
+    running = false;
 
     ros::spin();
     return 0;

@@ -14,6 +14,9 @@
         <param name="distance" value="$(arg distance)" />
         <param name="leader_id" value="$(arg leader_id)" />
 
+        <remap from="~stop" to="~stop_following" />
+        <remap from="~start" to="~start_following" />
+
         <remap from="~leader" to="object_tracker/filtered_poses"/>
         <remap from="~force" to="control_manager/speed_tracker/command"/>
         <remap from="~switch_tracker" to="control_manager/switch_tracker" />
