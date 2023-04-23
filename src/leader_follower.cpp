@@ -175,8 +175,9 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
         Eigen::Vector3d follower_tp = follower - target_pos;
         follower_tp = target_q.inverse() * follower_tp;
 
-        if (follower_tp(0) >= -1.0 or follower_tp.norm() < 1)
+        if (follower_tp(0) >= -1.0 or follower_tp.norm() < 2)
         {
+            ROS_INFO_STREAM_THROTTLE(0.5, "[LEADER_FOLLOWER] Generating reference to target point");
             Eigen::Vector3d new_position = leader_q * target_pos;
             new_position(2) = 0;
 
@@ -189,6 +190,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
             point.position.x = new_position(0);
             point.position.y = new_position(1);
             point.position.z = new_position(2);
+            ROS_INFO_STREAM_THROTTLE(0.5, "[LEADER_FOLLOWER] Target point is: " << new_position.transpose());
 
             point.heading = atan2(new_position(1) - leader_pos(1), new_position(0) - leader_pos(0)) + M_PI;
 
@@ -196,6 +198,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
         }
         else if (follower.norm() < distance + 0.5)
         {
+            ROS_INFO_STREAM_THROTTLE(0.5, "[LEADER_FOLLOWER] Generating path on circle");
             double current_angle = atan2(follower(1), follower(0));
             double final_angle = M_PI * angle / 180;
             double angle_increment = angdiff(final_angle, current_angle) / 20;
@@ -238,6 +241,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
         }
         else
         {
+            ROS_INFO_STREAM_THROTTLE(0.5, "[LEADER_FOLLOWER] Generating tangent line to circle");
             double final_angle = M_PI * angle / 180;
 
             double theta = acos(distance / follower.norm());
