@@ -194,7 +194,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
             path.request.path.points.push_back(point);
         }
-        else if (follower.norm() < distance + 1)
+        else if (follower.norm() < distance + 0.5)
         {
             double current_angle = atan2(follower(1), follower(0));
             double final_angle = M_PI * angle / 180;
