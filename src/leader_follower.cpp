@@ -117,6 +117,14 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
 #endif
 
+double angdiff(double th1, double th2)
+{
+    double d = 0;
+    d = th1 - th2;
+    d = std::fmod(d+M_PI, 2*M_PI) - M_PI;
+    return d;
+}
+
 void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 {
     if (!running)
@@ -134,7 +142,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
     path.request.path.stop_at_waypoints = false;
     path.request.path.loop = false;
     path.request.path.override_constraints = false;
-    path.request.path.relax_heading = true;
+    path.request.path.relax_heading = false;
 
     Eigen::Vector3d target_pos = Eigen::Vector3d::Zero();
     double heading = 0;
@@ -155,16 +163,23 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
                             element.pose.orientation.y,
                             element.pose.orientation.z,
                             element.pose.orientation.w);
-        heading = tf::getYaw(q_tf);
+        heading = atan2(leader_pos(1), leader_pos(0));
+        // heading = tf::getYaw(q_tf);
+
+        ROS_INFO_STREAM("[LEADER FOLLOWER] heading: " << heading);
 
         Eigen::Vector3d follower = leader_q.inverse() * (-leader_pos);
         follower(2) = 0;
+
+        ROS_INFO_STREAM("[LEADER FOLLOWER] follower: " << follower.transpose());
 
         target_pos << distance, 0, 0;
         target_pos = target_q * target_pos;
 
         Eigen::Vector3d follower_tp = follower - target_pos;
         follower_tp = target_q.inverse() * follower_tp;
+
+        ROS_INFO_STREAM("[LEADER FOLLOWER] follower_tp: " << follower_tp.transpose());
 
         if (follower_tp(0) >= -0.5)
         {
@@ -177,32 +192,51 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
             new_position += leader_pos;
 
-            ref.request.reference.position.x = new_position(0);
-            ref.request.reference.position.y = new_position(1);
-            ref.request.reference.position.z = new_position(2);
-            ref.request.reference.heading = heading;
+            mrs_msgs::Reference point;
+            point.position.x = new_position(0);
+            point.position.y = new_position(1);
+            point.position.z = new_position(2);
 
-            reference_ser.call(ref);
+            point.heading = heading;
+
+            path.request.path.points.push_back(point);
         }
         else
         {
+            double final_angle = M_PI * angle / 180;
+
             double theta = acos(distance / follower.norm());
             double beta = atan2(follower(1), follower(0));
 
-            double d1 = theta + beta;
-            double d2 = theta - beta;
+            // beta = beta < 0 ? beta + 2*M_PI : beta;
 
-            double diff1 = M_PI - abs(abs(M_PI * angle / M_PI - d1) - M_PI);
-            double diff2 = M_PI - abs(abs(M_PI * angle / M_PI - d2) - M_PI);
+            ROS_INFO_STREAM("[LEADER FOLLOWER] theta: " << theta);
+            ROS_INFO_STREAM("[LEADER FOLLOWER] beta: " << beta);
+
+            double d1 = angdiff(-(theta + beta), 0);
+            double d2 = angdiff(-(theta - beta), 0);
+
+            ROS_INFO_STREAM("[LEADER FOLLOWER] d1: " << d1);
+            ROS_INFO_STREAM("[LEADER FOLLOWER] d2: " << d2);
+
+            double diff1 = angdiff(final_angle, d1);
+            double diff2 = angdiff(final_angle, d2);
+
+            ROS_INFO_STREAM("[LEADER FOLLOWER] diff1: " << diff1);
+            ROS_INFO_STREAM("[LEADER FOLLOWER] diff2: " << diff2);
 
             double preffered_angle = 0;
 
-            if (diff1 <= diff2)
+            if (abs(diff1) <= abs(diff2))
                 preffered_angle = d1;
             else
                 preffered_angle = d2;
 
-            double angle_increment = (M_PI * angle / 180 - preffered_angle) / 20;
+            ROS_INFO_STREAM("[LEADER FOLLOWER] preffered_angle: " << preffered_angle << " " << final_angle);
+
+            double angle_increment = angdiff(final_angle, preffered_angle) / 20;
+
+            ROS_INFO_STREAM("[LEADER_FOLLOWER] Preffered angle: " << preffered_angle);
 
             for (int i = 0; i <= 20; i++)
             {
@@ -220,6 +254,8 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
                 new_position.normalize();
                 new_position *= distance;
 
+                heading = atan2(new_position(1), new_position(0)) + M_PI;
+
                 new_position += leader_pos;
 
                 ROS_INFO_STREAM("[LEADER_FOLLOWER] Follower: " << new_position.transpose());
@@ -233,9 +269,9 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
                 path.request.path.points.push_back(point);
             }
-
-            path_ser.call(path);
         }
+        path_ser.call(path);
+        // running = false;
     }
 
     // ROS_INFO_STREAM_THROTTLE(1.0, "[LEADER_FOLLOWER] Force: " << new_position.transpose());
