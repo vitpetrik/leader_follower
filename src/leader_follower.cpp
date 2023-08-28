@@ -175,7 +175,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
         Eigen::Vector3d follower_tp = follower - target_pos;
         follower_tp = target_q.inverse() * follower_tp;
 
-        if (follower_tp(0) >= -1.0 or follower_tp.norm() < 2)
+        if (true or follower_tp(0) >= -1.0 or follower_tp.norm() < 2)
         {
             ROS_INFO_STREAM_THROTTLE(0.5, "[LEADER_FOLLOWER] Generating reference to target point");
             Eigen::Vector3d new_position = leader_q * target_pos;

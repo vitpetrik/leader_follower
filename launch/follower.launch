@@ -8,21 +8,23 @@
 
   <group ns="$(arg uav_name)">
     <node name="leader_follower" pkg="leader_follower" type="leader_follower_node" output="screen" respawn="true">
-        <param name="uav_name" value="$(arg uav_name)" />
+      <param name="uav_name" value="$(arg uav_name)" />
 
-        <param name="angle" value="$(arg angle)" />
-        <param name="distance" value="$(arg distance)" />
-        <param name="leader_id" value="$(arg leader_id)" />
+      <param name="angle" value="$(arg angle)" />
+      <param name="distance" value="$(arg distance)" />
+      <param name="leader_id" value="$(arg leader_id)" />
 
-        <remap from="~stop" to="~stop_following" />
-        <remap from="~start" to="~start_following" />
+      <remap from="~stop" to="~stop_following" />
+      <remap from="~start" to="~start_following" />
 
-        <remap from="~leader" to="object_tracker/filtered_poses_fcu_untilted"/>
-        <remap from="~force" to="control_manager/speed_tracker/command"/>
-        <remap from="~switch_tracker" to="control_manager/switch_tracker" />
-        <remap from="~reference" to="control_manager/reference" />
-        <remap from="~trajectory_path" to="trajectory_generation/path" />
+      <!-- <remap from="~leader" to="object_tracker/filtered_poses_fcu_untilted"/> -->
+      <remap from="~force" to="control_manager/speed_tracker/command"/>
+      <remap from="~switch_tracker" to="control_manager/switch_tracker" />
+      <remap from="~reference" to="control_manager/reference" />
+      <remap from="~trajectory_path" to="trajectory_generation/path" />
     </node>
+
+    <node name="leader_throttle" type="throttle" pkg="topic_tools" args="messages object_tracker/filtered_poses_fcu_untilted 10 leader_follower/leader" output="screen"/>
   </group>
 
 </launch>
