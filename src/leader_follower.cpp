@@ -21,6 +21,8 @@
 #include <mrs_msgs/Path.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <mrs_lib/param_loader.h>
+#include <mrs_lib/transformer.h>
+
 
 #include <std_srvs/Trigger.h>
 #include <std_srvs/TriggerRequest.h>
@@ -42,8 +44,12 @@ ros::ServiceClient switch_ser;
 ros::ServiceClient reference_ser;
 ros::ServiceClient path_ser;
 
-bool running = false;
+std::shared_ptr<mrs_lib::Transformer> transformer;
+std::string uav_name;
+std::string command_frame;
+std::string control_frame;
 
+bool running = false;
 int leader_id = 0;
 double distance = 8;
 double angle = M_PI;
@@ -136,7 +142,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
     mrs_msgs::PathSrv path;
     path.request.path.header.stamp = ros::Time::now();
-    path.request.path.header.frame_id = msg.header.frame_id;
+    path.request.path.header.frame_id = control_frame;
     path.request.path.use_heading = true;
     path.request.path.fly_now = true;
     path.request.path.stop_at_waypoints = false;
@@ -147,22 +153,50 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
     Eigen::Vector3d target_pos = Eigen::Vector3d::Zero();
     double heading = 0;
 
+    std::optional<geometry_msgs::TransformStamped> transformation;
+    transformation = transformer->getTransform(msg.header.frame_id, command_frame, msg.header.stamp);
+
+    if (not transformation)
+    {
+        ROS_WARN("[LEADER FOLLOWER] Not found any transformation");
+        return;
+    }
+
+    std::optional<geometry_msgs::TransformStamped> transformation_control;
+    transformation_control = transformer->getTransform(command_frame, control_frame, msg.header.stamp);
+
+    if (not transformation_control)
+    {
+        ROS_WARN("[LEADER FOLLOWER] Not found any transformation");
+        return;
+    }
+
     for (auto element : msg.poses)
     {
         if (element.id != leader_id)
             continue;
 
-        Eigen::Quaterniond leader_q(element.pose.orientation.w, element.pose.orientation.x, element.pose.orientation.y, element.pose.orientation.z);
-        Eigen::Vector3d leader_pos(element.pose.position.x, element.pose.position.y, element.pose.position.z);
+        std::optional<geometry_msgs::Pose> transformed_opt = transformer->transform(element.pose, transformation.value());
+
+        if(not transformed_opt)
+        {
+            ROS_WARN("[LEADER FOLLOWER] Not found any transformation");
+            return;
+        }
+
+        geometry_msgs::Pose transformed = transformed_opt.value();
+
+        Eigen::Quaterniond leader_q(transformed.orientation.w, transformed.orientation.x, transformed.orientation.y, transformed.orientation.z);
+        Eigen::Vector3d leader_pos(transformed.position.x, transformed.position.y, transformed.position.z);
 
         Eigen::Quaterniond target_q = Eigen::AngleAxisd(0, Eigen::Vector3d::UnitX()) *
                                       Eigen::AngleAxisd(0, Eigen::Vector3d::UnitY()) *
                                       Eigen::AngleAxisd(M_PI * angle / 180, Eigen::Vector3d::UnitZ());
 
-        tf::Quaternion q_tf(element.pose.orientation.x,
-                            element.pose.orientation.y,
-                            element.pose.orientation.z,
-                            element.pose.orientation.w);
+        tf::Quaternion q_tf(transformed.orientation.x,
+                            transformed.orientation.y,
+                            transformed.orientation.z,
+                            transformed.orientation.w);
         heading = atan2(leader_pos(1), leader_pos(0));
         // heading = tf::getYaw(q_tf);
 
@@ -175,7 +209,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
         Eigen::Vector3d follower_tp = follower - target_pos;
         follower_tp = target_q.inverse() * follower_tp;
 
-        if (true or follower_tp(0) >= -1.0 or follower_tp.norm() < 2)
+        if (follower_tp(0) >= -1.0 or follower_tp.norm() < 2)
         {
             ROS_INFO_STREAM_THROTTLE(0.5, "[LEADER_FOLLOWER] Generating reference to target point");
             Eigen::Vector3d new_position = leader_q * target_pos;
@@ -300,7 +334,28 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
             }
         }
 
-        // sanity check
+        for(auto& point : path.request.path.points)
+        {
+            geometry_msgs::Pose point_trans;
+            point_trans.position.x = point.position.x;
+            point_trans.position.y = point.position.y;
+            point_trans.position.z = point.position.z;
+
+            tf2::Quaternion quaternion_tf2;
+            quaternion_tf2.setRPY(0, 0, point.heading);
+            point_trans.orientation = tf2::toMsg(quaternion_tf2);
+
+            point_trans = transformer->transform(point_trans, transformation_control.value()).value();
+
+            point.position.x = point_trans.position.x;
+            point.position.y = point_trans.position.y;
+            point.position.z = point_trans.position.z;
+
+            double roll, pitch, yaw;
+            tf2::fromMsg(point_trans.orientation, quaternion_tf2);
+            tf2::Matrix3x3(quaternion_tf2).getRPY(roll, pitch, yaw);
+            point.heading = yaw;
+        }
 
         path_ser.call(path);
         // running = false;
@@ -315,12 +370,16 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 bool stop(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
 {
     running = false;
+    res.success = true;
+    res.message = "Roger Roger!!! Leader follower stopped";
     return true;
 }
 
 bool start(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
 {
     running = true;
+    res.success = true;
+    res.message = "Roger Roger!!! Leader follower started";
     return true;
 }
 
@@ -336,7 +395,14 @@ int main(int argc, char **argv)
     ros::NodeHandle nh("~");
 
     mrs_lib::ParamLoader param_loader(nh, "Leader follower");
+    transformer = std::make_shared<mrs_lib::Transformer>("Leader follower", ros::Duration(0.5));
+    transformer->retryLookupNewest(true);
+    transformer->setDefaultPrefix("");
 
+    param_loader.loadParam("command_frame", command_frame);
+    param_loader.loadParam("control_frame", control_frame);
+
+    param_loader.loadParam("uav_name", uav_name);
     param_loader.loadParam("leader_id", leader_id);
     param_loader.loadParam("distance", distance);
     param_loader.loadParam("angle", angle);
