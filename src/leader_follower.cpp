@@ -23,7 +23,6 @@
 #include <mrs_lib/param_loader.h>
 #include <mrs_lib/transformer.h>
 
-
 #include <std_srvs/Trigger.h>
 #include <std_srvs/TriggerRequest.h>
 #include <std_srvs/TriggerResponse.h>
@@ -74,32 +73,46 @@ double repulsive_force(double distance, int order)
 
 void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 {
+    if (!running)
+        return;
     mrs_msgs::SpeedTrackerCommand cmd;
     cmd.header.stamp = ros::Time::now();
     cmd.header.frame_id = msg.header.frame_id;
 
     Eigen::Vector3d acceleration = Eigen::Vector3d::Zero();
 
+    std::optional<geometry_msgs::TransformStamped> transformation;
+    transformation = transformer->getTransform(msg.header.frame_id, command_frame, msg.header.stamp);
+
+    if (not transformation)
+    {
+        ROS_WARN("[LEADER FOLLOWER] Not found any transformation");
+        return;
+    }
+
     for (auto element : msg.poses)
     {
-        if(element.id != 0x0a)
-            continue;
-        Eigen::Vector3d body(element.pose.position.x, element.pose.position.y, element.pose.position.z);
+        std::optional<geometry_msgs::Pose> transformed_opt = transformer->transform(element.pose, transformation.value());
+
+        if (not transformed_opt)
+        {
+            ROS_WARN("[LEADER FOLLOWER] Not found any transformation");
+            return;
+        }
+
+        geometry_msgs::Pose transformed = transformed_opt.value();
+
+        Eigen::Vector3d body(transformed.position.x, transformed.position.y, transformed.position.z);
         double distance = body.norm();
         body /= distance;
 
         ROS_INFO_STREAM("[LEADER_FOLLOWER] Distance: " << distance);
 
         double attractive_force = 0.01*pow(distance - GOAL_DISTANCE, 2);
-        double repulsive_force = 0.01*(1 - 1/pow(distance/GOAL_DISTANCE, 2));
+        double repulsive_force = -0.01*(1 - 1/pow(distance/GOAL_DISTANCE, 2));
 
         ROS_INFO_STREAM("[LEADER_FOLLOWER] repulsive_force: " << repulsive_force);
-
-        if (distance >= GOAL_DISTANCE)
-            acceleration += attractive_force * body;
-        else
-            acceleration += repulsive_force * body;
-
+        acceleration = (attractive_force + repulsive_force) * body;
     }
 
     ROS_INFO_STREAM("[LEADER_FOLLOWER] Force: " << acceleration.transpose());
@@ -109,9 +122,9 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
     cmd.acceleration.z = 0;
     cmd.heading = atan2(acceleration(1), acceleration(0));
     cmd.use_heading = true;
-    cmd.height = 5;
+    cmd.z = 5;
     cmd.use_acceleration = true;
-    cmd.use_height = true;
+    cmd.use_z = true;
 
     force_pub.publish(cmd);
     mrs_msgs::String tracker;
@@ -121,7 +134,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
     return;
 }
 
-#endif
+#else
 
 double angdiff(double th1, double th2)
 {
@@ -178,7 +191,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
         std::optional<geometry_msgs::Pose> transformed_opt = transformer->transform(element.pose, transformation.value());
 
-        if(not transformed_opt)
+        if (not transformed_opt)
         {
             ROS_WARN("[LEADER FOLLOWER] Not found any transformation");
             return;
@@ -219,7 +232,6 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
             new_position *= distance;
 
             new_position += leader_pos;
-
             mrs_msgs::Reference point;
             point.position.x = new_position(0);
             point.position.y = new_position(1);
@@ -230,7 +242,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
             path.request.path.points.push_back(point);
         }
-        else if (follower.norm() < distance + 0.5)
+        else if (follower.norm() < distance + 0.25)
         {
             ROS_INFO_STREAM_THROTTLE(0.5, "[LEADER_FOLLOWER] Generating path on circle");
             double current_angle = atan2(follower(1), follower(0));
@@ -257,11 +269,11 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
                 new_position += leader_pos;
 
-                if ((leader_pos - new_position).norm() < distance - 0.1)
-                {
-                    ROS_INFO_STREAM("[LEADER FOLLOWER] Something really cursed happend");
-                    return;
-                }
+                // if ((leader_pos - new_position).norm() < distance - 0.1)
+                // {
+                //     ROS_INFO_STREAM("[LEADER FOLLOWER] Something really cursed happend");
+                //     return;
+                // }
 
                 mrs_msgs::Reference point;
                 point.position.x = new_position(0);
@@ -316,11 +328,11 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
             {
                 Eigen::Vector3d new_position = line_increment * i;
 
-                if ((leader_pos - new_position).norm() < distance - 0.1)
-                {
-                    ROS_INFO_STREAM("[LEADER FOLLOWER] Something really cursed happend");
-                    return;
-                }
+                // if ((leader_pos - new_position).norm() < distance - 0.1)
+                // {
+                //     ROS_INFO_STREAM("[LEADER FOLLOWER] Something really cursed happend");
+                //     return;
+                // }
                 heading = atan2(leader_pos(1) - new_position(1), leader_pos(0) - new_position(0));
 
                 mrs_msgs::Reference point;
@@ -334,7 +346,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
             }
         }
 
-        for(auto& point : path.request.path.points)
+        for (auto &point : path.request.path.points)
         {
             geometry_msgs::Pose point_trans;
             point_trans.position.x = point.position.x;
@@ -366,6 +378,7 @@ void leader_cb(const mrs_msgs::PoseWithCovarianceArrayStamped &msg)
 
     return;
 }
+#endif
 
 bool stop(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
 {

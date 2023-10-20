@@ -5,8 +5,7 @@
   <arg name="angle" default="3.14" />
   <arg name="distance" default="8" />
   <arg name="leader_id" default="0" />
-
-  <arg name="command_frame" default="$(arg uav_name)/fcu" />
+  <arg name="command_frame" default="$(arg uav_name)/fcu_untilted" />
   <arg name="control_frame" default="$(arg uav_name)/local_origin" />
 
   <group ns="$(arg uav_name)">
